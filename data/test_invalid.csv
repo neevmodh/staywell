@@ -1,0 +1,5 @@
+name,sleep_hours,study_hours,screen_time,stress_level,attendance
+Valid Student,7,6,4,3,85
+Invalid Student 1,8,12,8,4,90
+Invalid Student 2,6,10,9,5,75
+Another Valid,6.5,7,5,3,88

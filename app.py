@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 from core.validation import validate_row
 from core.scoring_engine import burnout_score, risk_label, get_statistical_summary
@@ -57,19 +58,271 @@ elif mode == "Use Sample Data":
     df = pd.read_csv("data/sample_students.csv")
     st.sidebar.success("✅ Sample data loaded")
     
-else:  # Manual Entry
-    st.sidebar.markdown("### 📝 Enter Student Data")
+else:  # Manual Entry - Completely Redesigned
+    st.sidebar.markdown("### 📝 Manual Student Entry")
+    st.sidebar.markdown("---")
+    
+    # Student Name
+    name = st.sidebar.text_input("👤 Student Name", "Student 1", help="Enter student identifier")
+    
+    st.sidebar.markdown("#### ⏰ Time Allocation (Max 24 hours)")
+    
+    # Time inputs with real-time validation
+    sleep_hours = st.sidebar.number_input(
+        "🛏️ Sleep Hours", 
+        min_value=0.0, 
+        max_value=24.0, 
+        value=7.0, 
+        step=0.5,
+        help="Recommended: 6-8 hours"
+    )
+    
+    study_hours = st.sidebar.number_input(
+        "📚 Study Hours", 
+        min_value=0.0, 
+        max_value=24.0, 
+        value=6.0, 
+        step=0.5,
+        help="Academic work time"
+    )
+    
+    screen_time = st.sidebar.number_input(
+        "📱 Screen Time", 
+        min_value=0.0, 
+        max_value=24.0, 
+        value=4.0, 
+        step=0.5,
+        help="Recreational screen usage"
+    )
+    
+    # Calculate totals
+    total_hours = sleep_hours + study_hours + screen_time
+    remaining_hours = 24 - total_hours
+    
+    # Visual progress bar for 24-hour constraint
+    st.sidebar.markdown("**Time Budget:**")
+    progress_value = min(total_hours / 24, 1.0)
+    st.sidebar.progress(progress_value)
+    
+    # Color-coded feedback
+    if total_hours > 24:
+        st.sidebar.error(f"❌ Over limit by {total_hours - 24:.1f} hours!")
+        st.sidebar.metric("Total Hours", f"{total_hours:.1f}", f"+{total_hours - 24:.1f}", delta_color="inverse")
+    else:
+        st.sidebar.success(f"✅ Valid: {total_hours:.1f}/24 hours")
+        st.sidebar.metric("Remaining", f"{remaining_hours:.1f} hrs", delta_color="normal")
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("#### 🎯 Behavioral Indicators")
+    
+    # Stress level with emoji feedback
+    stress_level = st.sidebar.slider(
+        "😰 Stress Level", 
+        min_value=1, 
+        max_value=5, 
+        value=3,
+        help="1=Very Low, 5=Very High"
+    )
+    
+    stress_emoji = ["😊", "🙂", "😐", "😟", "😰"]
+    st.sidebar.markdown(f"Current: {stress_emoji[stress_level-1]} **Level {stress_level}**")
+    
+    # Attendance with visual indicator
+    attendance = st.sidebar.slider(
+        "📊 Attendance (%)", 
+        min_value=0, 
+        max_value=100, 
+        value=85,
+        help="Class attendance percentage"
+    )
+    
+    if attendance >= 90:
+        st.sidebar.success(f"✅ Excellent: {attendance}%")
+    elif attendance >= 75:
+        st.sidebar.info(f"ℹ️ Good: {attendance}%")
+    else:
+        st.sidebar.warning(f"⚠️ Low: {attendance}%")
+    
+    st.sidebar.markdown("---")
+    
+    # Validation check before proceeding
+    if total_hours > 24:
+        st.error("❌ **Cannot Proceed: 24-Hour Constraint Violated**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Current Total", f"{total_hours:.1f} hours", f"+{total_hours - 24:.1f}", delta_color="inverse")
+        with col2:
+            st.metric("Maximum Allowed", "24.0 hours")
+        
+        st.warning("⚠️ **Please adjust the time values in the sidebar:**")
+        st.markdown(f"""
+        - 🛏️ Sleep: **{sleep_hours:.1f}** hours
+        - 📚 Study: **{study_hours:.1f}** hours  
+        - 📱 Screen: **{screen_time:.1f}** hours
+        - **Total: {total_hours:.1f} hours** (exceeds 24-hour limit)
+        
+        💡 **Tip:** Reduce one or more values so the total is ≤ 24 hours
+        """)
+        st.stop()
+    
+    # Create dataframe for valid entry
     df = pd.DataFrame([{
-        "name": st.sidebar.text_input("Name", "Student 1"),
-        "sleep_hours": st.sidebar.number_input("Sleep Hours (0–24)", 0.0, 24.0, 7.0, 0.5, help="Average daily sleep duration"),
-        "study_hours": st.sidebar.number_input("Study Hours (0–24)", 0.0, 24.0, 6.0, 0.5, help="Average daily study time"),
-        "screen_time": st.sidebar.number_input("Screen Time (0–24)", 0.0, 24.0, 4.0, 0.5, help="Average daily recreational screen time"),
-        "stress_level": st.sidebar.slider("Stress Level (1–5)", 1, 5, 3, help="Self-reported stress: 1=Low, 5=High"),
-        "attendance": st.sidebar.slider("Attendance (%)", 0, 100, 85, help="Class attendance percentage"),
+        "name": name,
+        "sleep_hours": sleep_hours,
+        "study_hours": study_hours,
+        "screen_time": screen_time,
+        "stress_level": stress_level,
+        "attendance": attendance,
     }])
+    
+    # Calculate burnout score for preview
+    temp_df = df.copy()
+    temp_df = temp_df.apply(validate_row, axis=1)
+    temp_df["burnout_score"] = temp_df.apply(burnout_score, axis=1)
+    temp_df["risk"] = temp_df["burnout_score"].apply(risk_label)
+    
+    preview_score = temp_df["burnout_score"].iloc[0]
+    preview_risk = temp_df["risk"].iloc[0]
+    
+    # Show entry summary with risk preview
+    st.success("✅ **Valid Entry - Ready for Analysis**")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("👤 Student", name)
+    with col2:
+        st.metric("⏰ Total Hours", f"{total_hours:.1f}/24")
+    with col3:
+        st.metric("🎯 Burnout Score", f"{preview_score:.2f}")
+    with col4:
+        # Risk with color
+        if "Elevated" in preview_risk:
+            st.metric("⚠️ Risk Level", "High", delta="Elevated", delta_color="inverse")
+        elif "Moderate" in preview_risk:
+            st.metric("⚠️ Risk Level", "Moderate", delta="Warning", delta_color="off")
+        else:
+            st.metric("✅ Risk Level", "Low", delta="Good", delta_color="normal")
+    
+    # Quick risk indicators
+    st.markdown("---")
+    st.markdown("### 🔍 Quick Risk Assessment")
+    
+    risk_indicators = []
+    if sleep_hours < 6:
+        risk_indicators.append("🛏️ **Sleep Deprivation**: Below 6 hours")
+    if stress_level >= 4:
+        risk_indicators.append("😰 **High Stress**: Level 4-5")
+    if screen_time > 6:
+        risk_indicators.append("📱 **Excessive Screen Time**: Over 6 hours")
+    if attendance < 75:
+        risk_indicators.append("📊 **Low Attendance**: Below 75%")
+    if study_hours > 10:
+        risk_indicators.append("📚 **Academic Overload**: Over 10 hours")
+    
+    if risk_indicators:
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.error(f"**{len(risk_indicators)} Risk Factor(s) Detected**")
+        with col2:
+            for indicator in risk_indicators:
+                st.markdown(f"- {indicator}")
+    else:
+        st.success("✅ **No Critical Risk Indicators Detected** - All values within healthy ranges")
+    
+    # Add visual graphs for manual entry
+    st.markdown("---")
+    st.markdown("### 📊 Visual Analysis")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Time allocation bar chart
+        fig, ax = plt.subplots(figsize=(6, 4))
+        categories = ['Sleep', 'Study', 'Screen', 'Other']
+        values = [sleep_hours, study_hours, screen_time, remaining_hours]
+        colors_chart = ['#4285F4', '#0F9D58', '#F4B400', '#E8E8E8']
+        
+        bars = ax.bar(categories, values, color=colors_chart, edgecolor='black', linewidth=1.5)
+        ax.set_ylabel('Hours', fontsize=11)
+        ax.set_title('Daily Time Allocation', fontsize=13, fontweight='bold')
+        ax.axhline(y=24, color='red', linestyle='--', linewidth=2, label='24h Limit')
+        ax.set_ylim(0, 26)
+        
+        # Add value labels
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{height:.1f}h',
+                    ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        ax.legend()
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+    
+    with col2:
+        # Risk factors radar/comparison chart
+        fig, ax = plt.subplots(figsize=(6, 4))
+        
+        factors = ['Sleep\nDeficit', 'Stress\nLevel', 'Screen\nTime', 'Study\nLoad', 'Attendance\nIssue']
+        # Calculate risk scores (0-1 scale)
+        sleep_risk = max(0, (7 - sleep_hours) / 7)
+        stress_risk = stress_level / 5
+        screen_risk = min(screen_time / 10, 1)
+        study_risk = min(study_hours / 10, 1)
+        attendance_risk = (100 - attendance) / 100
+        
+        risk_values = [sleep_risk, stress_risk, screen_risk, study_risk, attendance_risk]
+        
+        # Color code bars
+        bar_colors = []
+        for val in risk_values:
+            if val >= 0.6:
+                bar_colors.append('#DB4437')  # Red
+            elif val >= 0.3:
+                bar_colors.append('#F4B400')  # Yellow
+            else:
+                bar_colors.append('#0F9D58')  # Green
+        
+        bars = ax.barh(factors, risk_values, color=bar_colors, edgecolor='black', linewidth=1.5)
+        ax.set_xlabel('Risk Score', fontsize=11)
+        ax.set_title('Risk Factor Breakdown', fontsize=13, fontweight='bold')
+        ax.set_xlim(0, 1)
+        
+        # Add value labels
+        for i, (bar, val) in enumerate(zip(bars, risk_values)):
+            width = bar.get_width()
+            ax.text(width + 0.02, bar.get_y() + bar.get_height()/2.,
+                    f'{val:.2f}',
+                    ha='left', va='center', fontsize=9, fontweight='bold')
+        
+        # Add risk zones
+        ax.axvline(x=0.3, color='orange', linestyle='--', linewidth=1, alpha=0.5)
+        ax.axvline(x=0.6, color='red', linestyle='--', linewidth=1, alpha=0.5)
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    
+    st.markdown("---")
 
 # Validate and Process Data
 df = df.apply(validate_row, axis=1)
+
+# Filter out invalid rows (24-hour constraint) - for CSV uploads
+invalid_count = len(df[~df['valid']])
+if invalid_count > 0:
+    st.warning(f"⚠️ {invalid_count} student(s) removed: sleep + study + screen time exceeds 24 hours")
+
+df = df[df['valid']].copy()
+
+# Check if any valid data remains
+if len(df) == 0:
+    st.error("❌ No valid data available. All records exceed 24-hour limit.")
+    st.stop()
+
 df["burnout_score"] = df.apply(burnout_score, axis=1)
 df["risk"] = df["burnout_score"].apply(risk_label)
 
@@ -100,11 +353,32 @@ with tab1:
         st.subheader("Student Risk Assessment")
         display_df = df[["name", "sleep_hours", "study_hours", "screen_time", "stress_level", "attendance", "burnout_score", "risk"]].copy()
         display_df["burnout_score"] = display_df["burnout_score"].apply(lambda x: f"{x:.2f}")
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width='stretch', hide_index=True)
     
     with col2:
         st.subheader("Risk Distribution")
-        render_risk_distribution(df)
+        # Bar chart instead of pie chart
+        risk_counts = df['risk'].value_counts()
+        fig, ax = plt.subplots(figsize=(6, 4))
+        colors = {'🟢 Low Risk': '#0F9D58', '🟡 Moderate Risk': '#F4B400', '🔴 Elevated Risk': '#DB4437'}
+        plot_colors = [colors.get(risk, '#999999') for risk in risk_counts.index]
+        
+        bars = ax.bar(range(len(risk_counts)), risk_counts.values, color=plot_colors)
+        ax.set_xticks(range(len(risk_counts)))
+        ax.set_xticklabels(risk_counts.index, rotation=0, ha='center')
+        ax.set_ylabel('Number of Students', fontsize=11)
+        ax.set_title('Risk Level Distribution', fontsize=13, fontweight='bold')
+        
+        # Add value labels on bars
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{int(height)}',
+                    ha='center', va='bottom', fontsize=11, fontweight='bold')
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
 
 # TAB 2: Statistical Analysis
 with tab2:
@@ -113,7 +387,7 @@ with tab2:
     if len(df) > 1:
         st.subheader("📊 Descriptive Statistics")
         desc_stats = descriptive_statistics(df)
-        st.dataframe(desc_stats, use_container_width=True)
+        st.dataframe(desc_stats, width='stretch')
         
         st.markdown("---")
         
@@ -121,7 +395,7 @@ with tab2:
         with col1:
             st.subheader("🔗 Correlation Analysis")
             corr_data = correlation_analysis(df)
-            st.dataframe(corr_data.style.background_gradient(cmap='RdYlGn_r', axis=None), use_container_width=True)
+            st.dataframe(corr_data.style.background_gradient(cmap='RdYlGn_r', axis=None), width='stretch')
             
         with col2:
             st.subheader("📉 Correlation Heatmap")
@@ -248,7 +522,7 @@ with tab4:
         st.markdown("---")
         st.subheader("🎯 Batch Scenario Testing")
         scenarios = batch_simulate(row)
-        st.dataframe(scenarios, use_container_width=True, hide_index=True)
+        st.dataframe(scenarios, width='stretch', hide_index=True)
         
         best_scenario = scenarios.loc[scenarios['new_score'].idxmin()]
         st.success(f"**Best Scenario:** {best_scenario['scenario']} → Score: {best_scenario['new_score']:.2f} (Change: {best_scenario['change']:.2f})")
